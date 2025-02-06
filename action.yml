@@ -1,4 +1,4 @@
-name: "Command Retry"
+name: "Rerun Action"
 description: "Rerun commands with timeout handling and configurable retry logic"
 
 branding:
