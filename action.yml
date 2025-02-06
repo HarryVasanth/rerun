@@ -1,0 +1,54 @@
+name: "Command Retry"
+description: "Rerun commands with timeout handling and configurable retry logic"
+
+branding:
+  icon: "rotate-cw"
+  color: "blue"
+
+inputs:
+  timeout_minutes:
+    description: "Minutes to wait before attempt times out"
+    required: false
+  timeout_seconds:
+    description: "Seconds to wait before attempt times out"
+    required: false
+  max_attempts:
+    description: "Number of attempts to make"
+    required: true
+  command:
+    description: "Command to execute"
+    required: true
+  retry_wait_seconds:
+    description: "Seconds between retries"
+    required: false
+    default: "10"
+  shell:
+    description: "Shell to use"
+    required: false
+    default: "bash"
+  retry_on:
+    description: "Retry on error/timeout/any"
+    required: false
+    default: "any"
+  on_retry_command:
+    description: "Command to run before retry"
+    required: false
+  new_command_on_retry:
+    description: "New command for subsequent attempts"
+    required: false
+  continue_on_error:
+    description: "Continue workflow on error"
+    required: false
+    default: "false"
+
+outputs:
+  total_attempts:
+    description: "Total attempts made"
+  exit_code:
+    description: "Final exit code"
+  exit_error:
+    description: "Final error message"
+
+runs:
+  using: "docker"
+  image: "Dockerfile"
