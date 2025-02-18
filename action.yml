@@ -50,5 +50,18 @@ outputs:
     description: "Final error message"
 
 runs:
-  using: "docker"
-  image: "Dockerfile"
+  using: "composite"
+  steps:
+    - run: ${{ github.action_path }}/rerun.sh
+      shell: bash
+      env:
+        INPUT_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
+        INPUT_TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
+        INPUT_MAX_ATTEMPTS: ${{ inputs.max_attempts }}
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_RETRY_WAIT_SECONDS: ${{ inputs.retry_wait_seconds }}
+        INPUT_SHELL: ${{ inputs.shell }}
+        INPUT_RETRY_ON: ${{ inputs.retry_on }}
+        INPUT_ON_RETRY_COMMAND: ${{ inputs.on_retry_command }}
+        INPUT_NEW_COMMAND_ON_RETRY: ${{ inputs.new_command_on_retry }}
+        INPUT_CONTINUE_ON_ERROR: ${{ inputs.continue_on_error }}
