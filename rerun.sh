@@ -22,7 +22,7 @@ function run_command() {
 	cmd=${1:-$COMMAND}
 
 	if [ $TIMEOUT -gt 0 ]; then
-		timeout --preserve-status $TIMEOUT "$SHELL_TYPE" -c "$cmd"
+		timeout $TIMEOUT "$SHELL_TYPE" -c "$cmd"
 	else
 		$SHELL_TYPE -c "$cmd"
 	fi
@@ -59,16 +59,18 @@ while [ $ATTEMPT -le "$MAX_ATTEMPTS" ]; do
 	EXIT_CODE=$?
 	set -e
 
-	ERROR_TYPE="error"
-	if [ $EXIT_CODE -eq 124 ]; then
+	if [ $EXIT_CODE -eq 0 ]; then
+		ERROR_TYPE="none"
+		FINAL_ERROR=""
+	elif [ $EXIT_CODE -eq 124 ]; then
 		ERROR_TYPE="timeout"
 		FINAL_ERROR="Timeout occurred after $TIMEOUT seconds"
 	else
+		ERROR_TYPE="error"
 		FINAL_ERROR=$OUTPUT
 	fi
 
 	if should_retry $EXIT_CODE $ERROR_TYPE; then
-		# FIX: Check if we've reached the limit before sleeping
 		if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
 			echo "Attempt failed (${ERROR_TYPE}). Maximum attempts reached."
 			break
