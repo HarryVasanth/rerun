@@ -101,6 +101,31 @@ jobs:
           exponential_backoff: "true"
 ```
 
+## 💻 Standalone Usage (via curl)
+
+You don't have to be in GitHub Actions to use `rerun.sh`! You can download and run it directly in any terminal, script, or alternative CI/CD system.
+
+Since the script relies on environment variables (prefixed with `INPUT_`), you can execute it like this:
+
+```bash
+# 1. Download the script and make it executable
+curl -sO https://raw.githubusercontent.com/harryvasanth/rerun/main/rerun.sh
+chmod +x rerun.sh
+
+# 2. Run your flaky command with environment variables
+INPUT_MAX_ATTEMPTS=3 \
+INPUT_RETRY_WAIT_SECONDS=5 \
+INPUT_EXPONENTIAL_BACKOFF=true \
+INPUT_COMMAND="npm test" \
+./rerun.sh
+
 ```
+
+Alternatively, you can run it entirely in one line without saving the file:
+
+```bash
+export INPUT_MAX_ATTEMPTS=3
+export INPUT_COMMAND="curl -sS https://httpbin.org/delay/1"
+curl -s https://raw.githubusercontent.com/harryvasanth/rerun/main/rerun.sh | bash
 
 ```
