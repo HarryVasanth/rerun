@@ -1,0 +1,11 @@
+# Ignore misc
+*.md
+*.yml
+
+# Ignore Docker file
+Dockerfile
+
+# Ignore git files
+.git
+.gitignore
+.github

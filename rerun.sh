@@ -22,7 +22,7 @@ function run_command() {
     cmd=${1:-$COMMAND}
 
     if [ $TIMEOUT -gt 0 ]; then
-        timeout --preserve-status $TIMEOUT $SHELL_TYPE -c "$cmd"
+        timeout --preserve-status $TIMEOUT "$SHELL_TYPE" -c "$cmd"
     else
         $SHELL_TYPE -c "$cmd"
     fi
@@ -39,7 +39,7 @@ function should_retry() {
     esac
 }
 
-while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+while [ $ATTEMPT -le "$MAX_ATTEMPTS" ]; do
     echo "Attempt $ATTEMPT/$MAX_ATTEMPTS:"
 
     # Run cleanup command between attempts
@@ -69,20 +69,24 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
 
     if should_retry $EXIT_CODE $ERROR_TYPE; then
         echo "Attempt failed (${ERROR_TYPE}), retrying in ${RETRY_WAIT}s..."
-        sleep $RETRY_WAIT
+        sleep "$RETRY_WAIT"
         ATTEMPT=$((ATTEMPT + 1))
     else
         break
     fi
 done
 
+...existing code...
+
 # Set outputs
-echo "total_attempts=${ATTEMPT}" >>$GITHUB_OUTPUT
-echo "exit_code=${EXIT_CODE}" >>$GITHUB_OUTPUT
-echo "exit_error=${FINAL_ERROR}" >>$GITHUB_OUTPUT
+{
+    echo "total_attempts=${ATTEMPT}"
+    echo "exit_code=${EXIT_CODE}"
+    echo "exit_error=${FINAL_ERROR}"
+} >>"$GITHUB_OUTPUT"
 
 # Handle final exit
-if [ $CONTINUE_ON_ERROR = "true" ]; then
+if [ "$CONTINUE_ON_ERROR" = "true" ]; then
     exit 0
 else
     exit $EXIT_CODE
