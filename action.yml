@@ -1,5 +1,5 @@
 name: "Rerun Action"
-description: "Rerun commands with timeout handling and configurable retry logic"
+description: "Rerun commands with timeout handling, configurable retry logic, and exponential backoff"
 
 branding:
   icon: "rotate-cw"
@@ -7,47 +7,51 @@ branding:
 
 inputs:
   timeout_minutes:
-    description: "Minutes to wait before attempt times out"
+    description: "⏱️ Minutes to wait before attempt times out"
     required: false
   timeout_seconds:
-    description: "Seconds to wait before attempt times out"
+    description: "⏱️ Seconds to wait before attempt times out"
     required: false
   max_attempts:
-    description: "Number of attempts to make"
+    description: "🔢 Number of attempts to make"
     required: true
   command:
-    description: "Command to execute"
+    description: "💻 Command to execute"
     required: true
   retry_wait_seconds:
-    description: "Seconds between retries"
+    description: "⏳ Seconds between retries (Base wait time if backoff is used)"
     required: false
     default: "10"
+  exponential_backoff:
+    description: "📈 Use exponential backoff for retries (wait_time * 2^attempt)"
+    required: false
+    default: "false"
   shell:
-    description: "Shell to use"
+    description: "🐚 Shell to use"
     required: false
     default: "bash"
   retry_on:
-    description: "Retry on error/timeout/any"
+    description: "🎯 Condition to retry on: error/timeout/any"
     required: false
     default: "any"
   on_retry_command:
-    description: "Command to run before retry"
+    description: "🧹 Command to run before a retry (e.g., cleanup state)"
     required: false
   new_command_on_retry:
-    description: "New command for subsequent attempts"
+    description: "✨ Alternative command to run for subsequent attempts"
     required: false
   continue_on_error:
-    description: "Continue workflow on error"
+    description: "⏭️ Continue the workflow even if all attempts fail"
     required: false
     default: "false"
 
 outputs:
   total_attempts:
-    description: "Total attempts made"
+    description: "🔢 Total attempts made"
   exit_code:
-    description: "Final exit code"
+    description: "🚪 Final exit code"
   exit_error:
-    description: "Final error message"
+    description: "❌ Final error message"
 
 runs:
   using: "composite"
@@ -60,6 +64,7 @@ runs:
         INPUT_MAX_ATTEMPTS: ${{ inputs.max_attempts }}
         INPUT_COMMAND: ${{ inputs.command }}
         INPUT_RETRY_WAIT_SECONDS: ${{ inputs.retry_wait_seconds }}
+        INPUT_EXPONENTIAL_BACKOFF: ${{ inputs.exponential_backoff }}
         INPUT_SHELL: ${{ inputs.shell }}
         INPUT_RETRY_ON: ${{ inputs.retry_on }}
         INPUT_ON_RETRY_COMMAND: ${{ inputs.on_retry_command }}

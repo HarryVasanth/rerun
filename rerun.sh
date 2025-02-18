@@ -3,9 +3,10 @@ set -euo pipefail
 
 # Input handling
 TIMEOUT=$((${INPUT_TIMEOUT_MINUTES:-0} * 60 + ${INPUT_TIMEOUT_SECONDS:-0}))
-MAX_ATTEMPTS=${INPUT_MAX_ATTEMPTS}
-COMMAND=${INPUT_COMMAND}
+MAX_ATTEMPTS=${INPUT_MAX_ATTEMPTS:-1}
+COMMAND=${INPUT_COMMAND:-}
 RETRY_WAIT=${INPUT_RETRY_WAIT_SECONDS:-10}
+EXPONENTIAL_BACKOFF=${INPUT_EXPONENTIAL_BACKOFF:-false}
 SHELL_TYPE=${INPUT_SHELL:-bash}
 RETRY_ON=${INPUT_RETRY_ON:-any}
 CLEANUP_CMD=${INPUT_ON_RETRY_COMMAND:-}
@@ -17,40 +18,40 @@ ATTEMPT=1
 EXIT_CODE=0
 FINAL_ERROR=""
 
-function run_command() {
+run_command() {
 	local cmd
 	cmd=${1:-$COMMAND}
 
-	if [ $TIMEOUT -gt 0 ]; then
-		timeout $TIMEOUT "$SHELL_TYPE" -c "$cmd"
+	if [ "$TIMEOUT" -gt 0 ]; then
+		timeout "$TIMEOUT" "$SHELL_TYPE" -c "$cmd"
 	else
-		$SHELL_TYPE -c "$cmd"
+		"$SHELL_TYPE" -c "$cmd"
 	fi
 }
 
-function should_retry() {
+should_retry() {
 	local exit_code=$1
 	local error_type=$2
 
 	case $RETRY_ON in
-	"error") [[ $exit_code -ne 0 ]] && [[ $error_type == "error" ]] ;;
-	"timeout") [[ $error_type == "timeout" ]] ;;
-	*) [[ $exit_code -ne 0 ]] || [[ $error_type == "timeout" ]] ;;
+	"error") [[ "$exit_code" -ne 0 ]] && [[ "$error_type" == "error" ]] ;;
+	"timeout") [[ "$error_type" == "timeout" ]] ;;
+	*) [[ "$exit_code" -ne 0 ]] || [[ "$error_type" == "timeout" ]] ;;
 	esac
 }
 
-while [ $ATTEMPT -le "$MAX_ATTEMPTS" ]; do
-	echo "Attempt $ATTEMPT/$MAX_ATTEMPTS:"
+while [ "$ATTEMPT" -le "$MAX_ATTEMPTS" ]; do
+	echo "🔄 Attempt $ATTEMPT/$MAX_ATTEMPTS:"
 
-	# Run cleanup command between attempts
-	if [ $ATTEMPT -gt 1 ] && [ -n "$CLEANUP_CMD" ]; then
-		echo "Running cleanup command..."
-		$SHELL_TYPE -c "$CLEANUP_CMD" || true
+	# 🧹 Run cleanup command between attempts
+	if [ "$ATTEMPT" -gt 1 ] && [ -n "$CLEANUP_CMD" ]; then
+		echo "🧹 Running cleanup command..."
+		"$SHELL_TYPE" -c "$CLEANUP_CMD" || true
 	fi
 
-	# Switch command if specified
+	# Switch command if specified for retries
 	CURRENT_CMD=$COMMAND
-	if [ $ATTEMPT -gt 1 ] && [ -n "$NEW_CMD" ]; then
+	if [ "$ATTEMPT" -gt 1 ] && [ -n "$NEW_CMD" ]; then
 		CURRENT_CMD=$NEW_CMD
 	fi
 
@@ -59,25 +60,37 @@ while [ $ATTEMPT -le "$MAX_ATTEMPTS" ]; do
 	EXIT_CODE=$?
 	set -e
 
-	if [ $EXIT_CODE -eq 0 ]; then
+	# Evaluate exit code
+	if [ "$EXIT_CODE" -eq 0 ]; then
 		ERROR_TYPE="none"
 		FINAL_ERROR=""
-	elif [ $EXIT_CODE -eq 124 ]; then
+		echo "✅ Success! (Exit Code: 0)"
+	elif [ "$EXIT_CODE" -eq 124 ]; then
 		ERROR_TYPE="timeout"
 		FINAL_ERROR="Timeout occurred after $TIMEOUT seconds"
+		echo "⏱️ $FINAL_ERROR"
 	else
 		ERROR_TYPE="error"
 		FINAL_ERROR=$OUTPUT
+		echo "❌ Execution failed with exit code $EXIT_CODE."
 	fi
 
-	if should_retry $EXIT_CODE $ERROR_TYPE; then
+	# Decide next steps
+	if should_retry "$EXIT_CODE" "$ERROR_TYPE"; then
 		if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
-			echo "Attempt failed (${ERROR_TYPE}). Maximum attempts reached."
+			echo "🛑 Attempt failed (${ERROR_TYPE}). Maximum attempts ($MAX_ATTEMPTS) reached."
 			break
 		fi
 
-		echo "Attempt failed (${ERROR_TYPE}), retrying in ${RETRY_WAIT}s..."
-		sleep "$RETRY_WAIT"
+		# Calculate wait time
+		CURRENT_WAIT=$RETRY_WAIT
+		if [ "$EXPONENTIAL_BACKOFF" = "true" ]; then
+			MULTIPLIER=$((2 ** (ATTEMPT - 1)))
+			CURRENT_WAIT=$((RETRY_WAIT * MULTIPLIER))
+		fi
+
+		echo "⏳ Attempt failed (${ERROR_TYPE}), retrying in ${CURRENT_WAIT}s..."
+		sleep "$CURRENT_WAIT"
 		ATTEMPT=$((ATTEMPT + 1))
 	else
 		break
@@ -97,7 +110,8 @@ EOF_MARKER="EOF_$(date +%s)_$RANDOM"
 
 # Handle final exit
 if [ "$CONTINUE_ON_ERROR" = "true" ]; then
+	echo "⏭️ continue_on_error is true. Forcing exit code 0."
 	exit 0
 else
-	exit $EXIT_CODE
+	exit "$EXIT_CODE"
 fi
