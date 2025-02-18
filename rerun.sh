@@ -18,76 +18,84 @@ EXIT_CODE=0
 FINAL_ERROR=""
 
 function run_command() {
-    local cmd
-    cmd=${1:-$COMMAND}
+	local cmd
+	cmd=${1:-$COMMAND}
 
-    if [ $TIMEOUT -gt 0 ]; then
-        timeout --preserve-status $TIMEOUT "$SHELL_TYPE" -c "$cmd"
-    else
-        $SHELL_TYPE -c "$cmd"
-    fi
+	if [ $TIMEOUT -gt 0 ]; then
+		timeout --preserve-status $TIMEOUT "$SHELL_TYPE" -c "$cmd"
+	else
+		$SHELL_TYPE -c "$cmd"
+	fi
 }
 
 function should_retry() {
-    local exit_code=$1
-    local error_type=$2
+	local exit_code=$1
+	local error_type=$2
 
-    case $RETRY_ON in
-    "error") [[ $exit_code -ne 0 ]] && [[ $error_type == "error" ]] ;;
-    "timeout") [[ $error_type == "timeout" ]] ;;
-    *) [[ $exit_code -ne 0 ]] || [[ $error_type == "timeout" ]] ;;
-    esac
+	case $RETRY_ON in
+	"error") [[ $exit_code -ne 0 ]] && [[ $error_type == "error" ]] ;;
+	"timeout") [[ $error_type == "timeout" ]] ;;
+	*) [[ $exit_code -ne 0 ]] || [[ $error_type == "timeout" ]] ;;
+	esac
 }
 
 while [ $ATTEMPT -le "$MAX_ATTEMPTS" ]; do
-    echo "Attempt $ATTEMPT/$MAX_ATTEMPTS:"
+	echo "Attempt $ATTEMPT/$MAX_ATTEMPTS:"
 
-    # Run cleanup command between attempts
-    if [ $ATTEMPT -gt 1 ] && [ -n "$CLEANUP_CMD" ]; then
-        echo "Running cleanup command..."
-        $SHELL_TYPE -c "$CLEANUP_CMD" || true
-    fi
+	# Run cleanup command between attempts
+	if [ $ATTEMPT -gt 1 ] && [ -n "$CLEANUP_CMD" ]; then
+		echo "Running cleanup command..."
+		$SHELL_TYPE -c "$CLEANUP_CMD" || true
+	fi
 
-    # Switch command if specified
-    CURRENT_CMD=$COMMAND
-    if [ $ATTEMPT -gt 1 ] && [ -n "$NEW_CMD" ]; then
-        CURRENT_CMD=$NEW_CMD
-    fi
+	# Switch command if specified
+	CURRENT_CMD=$COMMAND
+	if [ $ATTEMPT -gt 1 ] && [ -n "$NEW_CMD" ]; then
+		CURRENT_CMD=$NEW_CMD
+	fi
 
-    set +e
-    OUTPUT=$(run_command "$CURRENT_CMD" 2>&1)
-    EXIT_CODE=$?
-    set -e
+	set +e
+	OUTPUT=$(run_command "$CURRENT_CMD" 2>&1)
+	EXIT_CODE=$?
+	set -e
 
-    ERROR_TYPE="error"
-    if [ $EXIT_CODE -eq 124 ]; then
-        ERROR_TYPE="timeout"
-        FINAL_ERROR="Timeout occurred after $TIMEOUT seconds"
-    else
-        FINAL_ERROR=$OUTPUT
-    fi
+	ERROR_TYPE="error"
+	if [ $EXIT_CODE -eq 124 ]; then
+		ERROR_TYPE="timeout"
+		FINAL_ERROR="Timeout occurred after $TIMEOUT seconds"
+	else
+		FINAL_ERROR=$OUTPUT
+	fi
 
-    if should_retry $EXIT_CODE $ERROR_TYPE; then
-        echo "Attempt failed (${ERROR_TYPE}), retrying in ${RETRY_WAIT}s..."
-        sleep "$RETRY_WAIT"
-        ATTEMPT=$((ATTEMPT + 1))
-    else
-        break
-    fi
+	if should_retry $EXIT_CODE $ERROR_TYPE; then
+		# FIX: Check if we've reached the limit before sleeping
+		if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
+			echo "Attempt failed (${ERROR_TYPE}). Maximum attempts reached."
+			break
+		fi
+
+		echo "Attempt failed (${ERROR_TYPE}), retrying in ${RETRY_WAIT}s..."
+		sleep "$RETRY_WAIT"
+		ATTEMPT=$((ATTEMPT + 1))
+	else
+		break
+	fi
 done
 
-...existing code...
+# Output multiline errors for GH Actions
+EOF_MARKER="EOF_$(date +%s)_$RANDOM"
 
-# Set outputs
 {
-    echo "total_attempts=${ATTEMPT}"
-    echo "exit_code=${EXIT_CODE}"
-    echo "exit_error=${FINAL_ERROR}"
+	echo "total_attempts=${ATTEMPT}"
+	echo "exit_code=${EXIT_CODE}"
+	echo "exit_error<<${EOF_MARKER}"
+	echo "${FINAL_ERROR}"
+	echo "${EOF_MARKER}"
 } >>"$GITHUB_OUTPUT"
 
 # Handle final exit
 if [ "$CONTINUE_ON_ERROR" = "true" ]; then
-    exit 0
+	exit 0
 else
-    exit $EXIT_CODE
+	exit $EXIT_CODE
 fi
