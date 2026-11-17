@@ -1,5 +1,5 @@
 name: "Rerun Action"
-description: "Rerun commands with timeout handling, configurable retry logic, and exponential backoff"
+description: "Retry a command with a timeout, backoff and clear outputs. No Docker. No Node."
 
 branding:
   icon: "rotate-cw"
@@ -7,57 +7,86 @@ branding:
 
 inputs:
   timeout_minutes:
-    description: "⏱️ Minutes to wait before attempt times out"
+    description: "⏱️ Minutes to wait before an attempt times out"
     required: false
   timeout_seconds:
-    description: "⏱️ Seconds to wait before attempt times out"
+    description: "⏱️ Seconds to wait before an attempt times out"
     required: false
   max_attempts:
     description: "🔢 Number of attempts to make"
     required: true
+    default: "3"
   command:
     description: "💻 Command to execute"
     required: true
   retry_wait_seconds:
-    description: "⏳ Seconds between retries (Base wait time if backoff is used)"
+    description: "⏳ Seconds between retries (base wait when using backoff)"
     required: false
     default: "10"
   exponential_backoff:
-    description: "📈 Use exponential backoff for retries (wait_time * 2^attempt)"
+    description: "📈 Double the wait after each failed attempt (true/false)"
     required: false
     default: "false"
+  max_retry_wait_seconds:
+    description: "🛑 Maximum wait between retries when exponential_backoff is on"
+    required: false
+    default: "300"
   shell:
-    description: "🐚 Shell to use"
+    description: "🐚 Shell to use: bash, sh, python, pwsh, powershell or cmd"
     required: false
     default: "bash"
   retry_on:
-    description: "🎯 Condition to retry on: error/timeout/any"
+    description: "🎯 Retry on any, error or timeout"
     required: false
     default: "any"
+  retry_on_exit_code:
+    description: "🎯 Retry only on this exit code. This replaces retry_on."
+    required: false
+  polling_interval_seconds:
+    description: "🔄 Seconds between timeout checks"
+    required: false
+    default: "1"
+  warning_on_retry:
+    description: "⚠️ Add a warning annotation before each retry (true/false)"
+    required: false
+    default: "true"
   on_retry_command:
-    description: "🧹 Command to run before a retry (e.g., cleanup state)"
+    description: "🧹 Command to run before a retry (for example, reset state)"
     required: false
   new_command_on_retry:
-    description: "✨ Alternative command to run for subsequent attempts"
+    description: "✨ Alternative command for the retries"
     required: false
   continue_on_error:
-    description: "⏭️ Continue the workflow even if all attempts fail"
+    description: "⏭️ Do not fail the step when all attempts fail (true/false)"
     required: false
     default: "false"
 
 outputs:
   total_attempts:
-    description: "🔢 Total attempts made"
+    description: "🔢 Number of attempts made"
+    value: ${{ steps.rerun.outputs.total_attempts }}
   exit_code:
-    description: "🚪 Final exit code"
+    description: "🚪 Final exit code (124 on timeout)"
+    value: ${{ steps.rerun.outputs.exit_code }}
   exit_error:
-    description: "❌ Final error message"
+    description: "❌ Reason for the final failure"
+    value: ${{ steps.rerun.outputs.exit_error }}
+  duration_seconds:
+    description: "⏱️ Total time for all attempts and waits"
+    value: ${{ steps.rerun.outputs.duration_seconds }}
 
 runs:
   using: "composite"
   steps:
-    - run: ${{ github.action_path }}/rerun.sh
+    - id: rerun
       shell: bash
+      # Cygpath makes the script path valid in Git Bash on Windows.
+      run: |
+        action_path="${{ github.action_path }}"
+        if command -v cygpath >/dev/null 2>&1; then
+          action_path=$(cygpath -u "$action_path")
+        fi
+        bash "$action_path/rerun.sh"
       env:
         INPUT_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
         INPUT_TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
@@ -65,8 +94,12 @@ runs:
         INPUT_COMMAND: ${{ inputs.command }}
         INPUT_RETRY_WAIT_SECONDS: ${{ inputs.retry_wait_seconds }}
         INPUT_EXPONENTIAL_BACKOFF: ${{ inputs.exponential_backoff }}
+        INPUT_MAX_RETRY_WAIT_SECONDS: ${{ inputs.max_retry_wait_seconds }}
         INPUT_SHELL: ${{ inputs.shell }}
         INPUT_RETRY_ON: ${{ inputs.retry_on }}
+        INPUT_RETRY_ON_EXIT_CODE: ${{ inputs.retry_on_exit_code }}
+        INPUT_POLLING_INTERVAL_SECONDS: ${{ inputs.polling_interval_seconds }}
+        INPUT_WARNING_ON_RETRY: ${{ inputs.warning_on_retry }}
         INPUT_ON_RETRY_COMMAND: ${{ inputs.on_retry_command }}
         INPUT_NEW_COMMAND_ON_RETRY: ${{ inputs.new_command_on_retry }}
         INPUT_CONTINUE_ON_ERROR: ${{ inputs.continue_on_error }}

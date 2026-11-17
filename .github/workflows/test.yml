@@ -1,0 +1,116 @@
+name: "🧪 Test"
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: "🧪 ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: "🐧 Check out repository code"
+        uses: actions/checkout@v7
+
+      - name: "✅ Success"
+        id: success
+        uses: ./
+        with:
+          max_attempts: 2
+          timeout_seconds: 10
+          command: echo ok
+
+      - name: "🧪 Check success"
+        shell: bash
+        run: |
+          test "${{ steps.success.outputs.exit_code }}" = "0"
+          test "${{ steps.success.outputs.total_attempts }}" = "1"
+
+      - name: "🔁 Flaky command"
+        id: flaky
+        uses: ./
+        with:
+          max_attempts: 4
+          retry_wait_seconds: 0
+          timeout_seconds: 10
+          command: |
+            if [ -f "$RUNNER_TEMP/rerun-flaky" ]; then
+              exit 0
+            fi
+            touch "$RUNNER_TEMP/rerun-flaky"
+            exit 1
+
+      - name: "🧪 Check flaky output"
+        shell: bash
+        run: |
+          test "${{ steps.flaky.outputs.exit_code }}" = "0"
+          test "${{ steps.flaky.outputs.total_attempts }}" = "2"
+
+      - name: "⏱️ Timeout"
+        id: timeout
+        continue-on-error: true
+        uses: ./
+        with:
+          max_attempts: 2
+          retry_wait_seconds: 0
+          timeout_seconds: 1
+          command: sleep 5
+
+      - name: "🧪 Check timeout output"
+        shell: bash
+        run: |
+          test "${{ steps.timeout.outcome }}" = "failure"
+          test "${{ steps.timeout.outputs.exit_code }}" = "124"
+          test "${{ steps.timeout.outputs.total_attempts }}" = "2"
+
+      - name: "🎯 Retry one exit code"
+        id: exit_code
+        continue-on-error: true
+        uses: ./
+        with:
+          max_attempts: 3
+          retry_wait_seconds: 0
+          retry_on_exit_code: 42
+          command: exit 7
+
+      - name: "🧪 Check exit code output"
+        shell: bash
+        run: |
+          test "${{ steps.exit_code.outcome }}" = "failure"
+          test "${{ steps.exit_code.outputs.exit_code }}" = "7"
+          test "${{ steps.exit_code.outputs.total_attempts }}" = "1"
+
+      - name: "⏭️ Continue on error"
+        id: soft
+        uses: ./
+        with:
+          max_attempts: 1
+          continue_on_error: "true"
+          command: exit 5
+
+      - name: "🧪 Check continue on error output"
+        shell: bash
+        run: |
+          test "${{ steps.soft.outcome }}" = "success"
+          test "${{ steps.soft.outputs.exit_code }}" = "5"
+
+      - name: "❌ Invalid input"
+        id: invalid
+        continue-on-error: true
+        uses: ./
+        with:
+          max_attempts: 0
+          command: echo never
+
+      - name: "🧪 Check invalid input output"
+        shell: bash
+        run: test "${{ steps.invalid.outcome }}" = "failure"

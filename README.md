@@ -1,68 +1,80 @@
 # 🔄 Rerun Action
 
-This GitHub Action retries a command with configurable timeout handling, retry logic, and optional **exponential backoff**. It's designed to be lightweight, fast, and compatible across different environments! 🌍
+Retry a command with a timeout, backoff and clear outputs.
 
-## ✨ Features
+No Docker. No Node. One bash script. It starts in milliseconds and it works on
+GitHub-hosted and self-hosted runners.
 
-- ⏱️ Configurable timeout in minutes or seconds.
-- 📈 **Exponential backoff** support to gracefully handle rate limits or network issues.
-- 🔄 Adjustable number of retry attempts.
-- 🐚 Support for various shells (bash, sh, cmd, powershell).
-- 🧹 Option to run cleanup commands between retries.
-- ✨ Ability to swap the execution command on subsequent attempts.
-- 🪶 Lightweight implementation using Bash in a minimal Alpine Docker container.
+## ✨ Why use this
+
+- 🪶 **Lightweight.** No Node runtime and no image pull. The step starts at once.
+- 📡 **Live output.** The command writes to the log as it runs. Logs do not wait.
+- 🌳 **Clean timeout.** On timeout, the action stops the process tree, not only the direct child.
+- 🌍 **Portable.** Linux, macOS and Windows (Git Bash).
+- 📊 **Clear results.** Outputs for attempts, exit code and duration. A step summary table.
+- 🔐 **No extra access.** No Docker socket. No token. No permissions.
+- 🧯 **Safe logs.** The command is never printed, so secrets in it stay out of the log.
 
 ## 📥 Inputs
 
-| Input                  | Description                                                   | Required | Default |
-| ---------------------- | ------------------------------------------------------------- | -------- | ------- |
-| `timeout_minutes`      | ⏱️ Minutes to wait before attempt times out                   | No       | N/A     |
-| `timeout_seconds`      | ⏱️ Seconds to wait before attempt times out                   | No       | N/A     |
-| `max_attempts`         | 🔢 Number of attempts to make                                 | Yes      | N/A     |
-| `command`              | 💻 Command to execute                                         | Yes      | N/A     |
-| `retry_wait_seconds`   | ⏳ Seconds between retries (Base wait if using backoff)       | No       | 10      |
-| `exponential_backoff`  | 📈 Wait time doubles after each failed attempt (`true/false`) | No       | false   |
-| `shell`                | 🐚 Shell to use                                               | No       | bash    |
-| `retry_on`             | 🎯 Retry on `error` / `timeout` / `any`                       | No       | any     |
-| `on_retry_command`     | 🧹 Command to run before retry (e.g., reset state)            | No       | N/A     |
-| `new_command_on_retry` | ✨ Alternative command for subsequent attempts                | No       | N/A     |
-| `continue_on_error`    | ⏭️ Continue workflow on error (`true/false`)                  | No       | false   |
+| Input | Description | Required | Default |
+| --- | --- | --- | --- |
+| `timeout_minutes` | ⏱️ Minutes per attempt | No | none |
+| `timeout_seconds` | ⏱️ Seconds per attempt | No | none |
+| `max_attempts` | 🔢 Number of attempts | Yes | `3` |
+| `command` | 💻 Command to run | Yes | none |
+| `retry_wait_seconds` | ⏳ Wait between retries | No | `10` |
+| `exponential_backoff` | 📈 Double the wait after each failure | No | `false` |
+| `max_retry_wait_seconds` | 🛑 Cap for the backoff wait | No | `300` |
+| `shell` | 🐚 `bash`, `sh`, `python`, `pwsh`, `powershell` or `cmd` | No | `bash` |
+| `retry_on` | 🎯 Retry on `any`, `error` or `timeout` | No | `any` |
+| `retry_on_exit_code` | 🎯 Retry only on this exit code. This replaces `retry_on` | No | none |
+| `polling_interval_seconds` | 🔄 Seconds between timeout checks | No | `1` |
+| `warning_on_retry` | ⚠️ Add a warning before each retry | No | `true` |
+| `on_retry_command` | 🧹 Command to run before a retry | No | none |
+| `new_command_on_retry` | ✨ Alternative command for the retries | No | none |
+| `continue_on_error` | ⏭️ Do not fail the step when all attempts fail | No | `false` |
+
+Set `timeout_minutes` or `timeout_seconds`. You can set both; the values add.
+If you set neither, the command has no timeout. Set a timeout for commands that can hang.
 
 ## 📤 Outputs
 
-| Output           | Description            |
-| ---------------- | ---------------------- |
-| `total_attempts` | 🔢 Total attempts made |
-| `exit_code`      | 🚪 Final exit code     |
-| `exit_error`     | ❌ Final error message |
+| Output | Description |
+| --- | --- |
+| `total_attempts` | 🔢 Number of attempts made |
+| `exit_code` | 🚪 Final exit code (`124` on timeout) |
+| `exit_error` | ❌ Reason for the final failure |
+| `duration_seconds` | ⏱️ Total time for all attempts and waits |
 
 ## 🛠️ Usage
 
 ### 🔄 Basic retry
 
 ```yaml
-- uses: harryvasanth/rerun@v1
+- uses: HarryVasanth/rerun@v1
   with:
     timeout_seconds: 30
     max_attempts: 3
     command: "apt-get update"
 ```
 
-### 📈 Retry with Exponential Backoff
+### 📈 Backoff with a cap
 
 ```yaml
-- uses: harryvasanth/rerun@v1
+- uses: HarryVasanth/rerun@v1
   with:
     max_attempts: 4
-    command: "curl -f [https://api.flaky-service.com/data](https://api.flaky-service.com/data)"
     retry_wait_seconds: 5
-    exponential_backoff: "true" # Waits 5s, then 10s, then 20s
+    max_retry_wait_seconds: 30
+    exponential_backoff: "true" # Waits 5s, 10s, 20s. Never more than 30s.
+    command: "curl -fsS https://api.example.com/data"
 ```
 
-### 🧹 Retry with cleanup
+### 🧹 Cleanup before a retry
 
 ```yaml
-- uses: harryvasanth/rerun@v1
+- uses: HarryVasanth/rerun@v1
   with:
     max_attempts: 5
     command: "dpkg -i package.deb"
@@ -72,60 +84,94 @@ This GitHub Action retries a command with configurable timeout handling, retry l
 ### ✨ Different command on retry
 
 ```yaml
-- uses: harryvasanth/rerun@v1
+- uses: HarryVasanth/rerun@v1
   with:
     max_attempts: 3
-    command: "apt-get install -y some-package"
-    new_command_on_retry: "apt-get install -y some-package --no-install-recommends"
+    command: "apt-get install -y package"
+    new_command_on_retry: "apt-get install -y package --no-install-recommends"
 ```
 
-## 📝 Example Scenario
-
-Retry a potentially flaky Debian package installation with a longer timeout and exponential backoff:
+### 🎯 Retry one exit code
 
 ```yaml
-jobs:
-  install:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: 📦 Update package lists
-        run: sudo apt-get update
-      - name: 🚀 Install package with smart retry
-        uses: harryvasanth/rerun@v1
-        with:
-          timeout_minutes: 5
-          max_attempts: 3
-          command: sudo apt-get install -y potentially-flaky-package
-          retry_wait_seconds: 15
-          exponential_backoff: "true"
+- uses: HarryVasanth/rerun@v1
+  with:
+    max_attempts: 3
+    retry_on_exit_code: 42
+    command: "./flaky-tool"
 ```
 
-## 💻 Standalone Usage (via curl)
+### ⏭️ Continue after a failure
 
-You don't have to be in GitHub Actions to use `rerun.sh`! You can download and run it directly in any terminal, script, or alternative CI/CD system.
+```yaml
+- uses: HarryVasanth/rerun@v1
+  id: deploy
+  with:
+    max_attempts: 2
+    continue_on_error: "true"
+    command: "./deploy.sh"
 
-Since the script relies on environment variables (prefixed with `INPUT_`), you can execute it like this:
+- run: echo "Exit code was ${{ steps.deploy.outputs.exit_code }}"
+```
+
+### 🐍 Python shell
+
+```yaml
+- uses: HarryVasanth/rerun@v1
+  with:
+    shell: python
+    command: "import urllib.request; urllib.request.urlopen('https://example.com')"
+```
+
+## 🐚 Shell and OS support
+
+| Shell | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| `bash` | ✅ | ✅ | ✅ (Git Bash) |
+| `sh` | ✅ | ✅ | ❌ |
+| `python` | ✅ | ✅ | ✅ |
+| `pwsh` | ✅ | ✅ | ✅ |
+| `powershell` | ❌ | ❌ | ✅ |
+| `cmd` | ❌ | ❌ | ✅ |
+
+## 🧪 Standalone use
+
+Set the `INPUT_*` variables and run the script. This works outside GitHub Actions.
 
 ```bash
-# 1. Download the script and make it executable
-curl -sO https://raw.githubusercontent.com/harryvasanth/rerun/main/rerun.sh
+curl -fsSLO https://raw.githubusercontent.com/HarryVasanth/rerun/main/rerun.sh
 chmod +x rerun.sh
 
-# 2. Run your flaky command with environment variables
 INPUT_MAX_ATTEMPTS=3 \
 INPUT_RETRY_WAIT_SECONDS=5 \
-INPUT_EXPONENTIAL_BACKOFF=true \
+INPUT_TIMEOUT_SECONDS=60 \
 INPUT_COMMAND="npm test" \
 ./rerun.sh
-
 ```
 
-Alternatively, you can run it entirely in one line without saving the file:
+The script prints the outputs when `GITHUB_OUTPUT` is not set.
 
-```bash
-export INPUT_MAX_ATTEMPTS=3
-export INPUT_COMMAND="curl -sS https://httpbin.org/delay/1"
-curl -s https://raw.githubusercontent.com/harryvasanth/rerun/main/rerun.sh | bash
+## 🔐 Security
 
+- **No runtime downloads.** The action runs the script from its own repository.
+- **No command echo.** The action does not print `command`, so secrets stay out of the log.
+- **No Docker socket.** The action never asks for host access.
+- **Least privilege.** No token and no permissions are needed.
+- **Pin for production.** Use a commit SHA instead of `@v1`:
+
+```yaml
+- uses: HarryVasanth/rerun@<commit-sha> # v1
 ```
+
+- **Limit the job.** Add `permissions: contents: read` to the workflow when the job needs nothing more.
+
+## ⚠️ Limits
+
+- Timeout checks run every `polling_interval_seconds` (default 1s). A timeout can be about 1s late.
+- Git Bash on Windows has no `pgrep`. The action then stops the direct child only.
+- The action streams output and does not capture it. `exit_error` is a short reason, not the full log.
+- There is no retry on an output pattern. Use `retry_on_exit_code` or make the command exit with a code.
+
+## 📄 License
+
+MIT
